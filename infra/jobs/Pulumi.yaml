@@ -1,0 +1,20 @@
+name: jobs
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Pulumi program for managing CrawlTheThings jobs
+template:
+  config:
+    jobs:vpc_id:
+      description: VPC to host jobs in
+    jobs:subnet_cidr:
+      description: Subnet CIDR used to create for EC2 job resources
+    jobs:nat_subnet_cidr:
+      description: Subnet CIDR used to create for NAT
+    jobs:instance_type:
+      description: EC2 instance type
+    jobs:ssm_arn:
+      description: ARN for amazon SSM policy
+    jobs:public_key:
+      description: Public key to associate with compute instances

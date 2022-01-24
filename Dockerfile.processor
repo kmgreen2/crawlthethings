@@ -1,0 +1,36 @@
+FROM python:3.8-alpine as base
+
+RUN mkdir -p /main
+WORKDIR /main
+
+COPY Pipfile /main
+COPY Pipfile.lock /main
+
+RUN apk update && apk upgrade && \
+    apk add --update alpine-sdk && \
+    apk add libffi-dev openssl-dev && \
+    apk add --no-cache alpine-sdk  bash git make gcc g++ linux-headers wget curl build-base libc6-compat jpeg-dev zlib-dev libc-dev libxslt-dev openssl-dev && \
+    apk add py3-pip && pip3 install --upgrade pip pipenv \
+    && pip3 install --no-cache-dir \
+        awscli
+
+RUN pip3 install --upgrade pip
+
+RUN pip3 install pipenv
+
+RUN pip3 install --upgrade setuptools
+
+# RUN GRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1 GRPC_PYTHON_BUILD_SYSTEM_ZLIB=1 pipenv install grpcio="==1.39.0"
+
+# Install python dependencies in /.venv
+RUN --mount=type=cache,target=/root/.cache iGRPC_PYTHON_BUILD_SYSTEM_OPENSSL=1 GRPC_PYTHON_BUILD_SYSTEM_ZLIB=1 PIPENV_VENV_IN_PROJECT=1 pipenv install
+
+FROM base AS runtime
+
+ENV PYTHONPATH /main
+
+COPY --from=base /main/.venv /main/.venv
+ENV PATH="/main/.venv/bin:$PATH"
+
+COPY src /main/src
+COPY projects /main/projects
