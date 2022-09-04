@@ -1,13 +1,14 @@
+from boto.s3.bucket import Bucket
 from boto.s3.key import Key
 
 
 # Wrapper around S3 key for situations where we have the offset, but no length.  In this case, we
 # cannot set range headers, so internally seek when opening the key
 class KeyAtOffset(Key):
-    def __init__(self, key: str, seek_to_offset: int, bucket: str=None, name: str=None):
+    def __init__(self, key: str, seek_to_offset: int, bucket: Bucket = None, name: str = None):
         super().__init__(bucket, name)
         self.offset = 0
-        self.chunk_size = 1024*1024*64
+        self.chunk_size = 1024 * 1024 * 64
         self.key = key
         self._seek(seek_to_offset)
 
@@ -27,7 +28,7 @@ class KeyAtOffset(Key):
 
 # Wrapper around S3 key for situations where we have the offset and length.  Here, we set the range headers
 class KeyChunk(Key):
-    def __init__(self, key: str, start: int, end: int, bucket: str=None, name: str=None):
+    def __init__(self, key: str, start: int, end: int, bucket: Bucket = None, name: str = None):
         super().__init__(bucket, name)
         self.offset = start
         self.start = start
@@ -44,7 +45,7 @@ class KeyChunk(Key):
         return data
 
 
-def get_warc_s3_key(key: str, start: int, end: int, bucket: str=None, name: str=None) -> Key:
+def get_warc_s3_key(key: str, start: int, end: int, bucket: Bucket = None, name: str = None) -> Key:
     if end > -1:
         return KeyChunk(key, start, end, bucket, name)
     elif start > 0:

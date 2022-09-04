@@ -1,13 +1,13 @@
-import multiprocessing
-import threading
-from typing import List, Dict, Iterator
-
-import json
-import sys
 import argparse
-from multiprocessing import Pool, Manager
+import base64
+import gzip
+import json
+import threading
+from multiprocessing import Pool
 from multiprocessing.managers import SyncManager
+from typing import List, Dict
 
+from src.ingestion.btc import BTCIngestor
 from src.ingestion.csv import CSVIngestor
 from src.ingestion.warc import WarcIngestor
 from src.processors.copy import CopyProcessor
@@ -19,26 +19,30 @@ from src.util.logging import Logger
 
 logger = Logger()
 
+
 def parse():
     parser = argparse.ArgumentParser(description='')
-    parser.add_argument('-i','--input', help='Input file containing ingest-specific configuration', required=True)
-    parser.add_argument('-o','--output', help='Output path (e.g. s3://<bucket>/<path> or file://<path>)', required=False)
-    parser.add_argument('-p','--processor', help='Processor to use (e.g. news)', required=True)
-    parser.add_argument('-I','--ingestor', help='Ingestor to use (e.g. warc-index)', required=True)
-    parser.add_argument('-t','--threads', help='Number of threads (default=16)', default=16)
+    parser.add_argument('-i', '--input', help='Input file containing ingest-specific configuration', required=True)
+    parser.add_argument('-o', '--output', help='Output path (e.g. s3://<bucket>/<path> or file://<path>)',
+                        required=False)
+    parser.add_argument('-p', '--processor', help='Processor to use (e.g. news)', required=True)
+    parser.add_argument('-I', '--ingestor', help='Ingestor to use (e.g. warc-index)', required=True)
+    parser.add_argument('-t', '--threads', help='Number of threads (default=16)', default=16)
     return parser.parse_args()
 
 
 def flush_results(storage_object: StorageObject, results: List[Dict]):
     if len(results) > 0:
         logger.warning(f'Appending {len(results)} results')
-        json_str = json.dumps(list(results))
-        storage_object.append(json_str)
+        for r in results:
+            storage_object.append(
+                str(base64.b64encode(gzip.compress(str(json.dumps(r)).encode('utf-8'), 9)).decode('ascii') + '\n'))
 
         del results[:]
 
 
-def do_process(processor: str, storage_object: StorageObject, record: Record, results: List[Dict], mutex: threading.Lock, semaphore: threading.Semaphore):
+def do_process(processor: str, storage_object: StorageObject, record: Record, results: List[Dict],
+               mutex: threading.Lock, semaphore: threading.Semaphore):
     try:
         if processor == 'news':
             NewsProcessor(results, mutex).process(record)
@@ -77,9 +81,11 @@ def main():
             semaphore = manager.Semaphore(int(args.threads))
             storage_object = manager.StorageObject(storage_desc)
             if args.ingestor == 'warc-index':
-                ingestor = WarcIngestor('commoncrawl', args.input)
+                ingestor = WarcIngestor('commoncrawl', open(args.input), manager=manager)
             elif args.ingestor == 'csv-file':
                 ingestor = CSVIngestor(args.input)
+            elif args.ingestor == 'btc':
+                ingestor = BTCIngestor(args.input)
             else:
                 raise Exception(f'Unknown ingestor: {args.ingestor}')
 
@@ -87,8 +93,8 @@ def main():
                 semaphore.acquire()
                 p.apply_async(do_process, (args.processor, storage_object, record, results, mutex, semaphore),
                               callback=callback, error_callback=error_callback)
-            p.close()
-            p.join()
+            # p.close()
+            # p.join()
 
             with mutex:
                 flush_results(storage_object, results)
@@ -101,5 +107,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-

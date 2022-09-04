@@ -37,9 +37,9 @@ class StorageObject:
         self.desc = desc
         if self.desc.file_type == 's3':
             self.local_filename = f'/tmp/{str(uuid.uuid4())}{desc.bucket}-{desc.path.replace("/", ":")}'
-            self.append_file = open(self.local_filename, "a+")
+            self.append_file = open(self.local_filename, mode="a+", encoding='utf-8')
         elif self.desc.file_type == 'file':
-            self.append_file = open(desc.path, "a+")
+            self.append_file = open(desc.path, mode="a+", encoding='utf-8')
         else:
            raise Exception(f'Unknown file type: {self.desc.file_type}')
 

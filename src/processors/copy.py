@@ -18,7 +18,7 @@ class CopyProcessor(Processor):
                 {
                     "uri": record.uri,
                     "ts": record.ts,
-                    "content": record.content.decode('utf-8')
+                    "content": record.content
                 }
             )
         except Exception as e:
