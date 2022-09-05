@@ -3,7 +3,7 @@ import base64
 import gzip
 import json
 import threading
-from multiprocessing import Pool
+from multiprocessing import get_context
 from multiprocessing.managers import SyncManager
 from typing import List, Dict
 
@@ -75,7 +75,7 @@ def main():
     storage_desc = StorageDescriptor(args.output)
     SyncManager.register('StorageObject', StorageObject)
     with SyncManager() as manager:
-        with Pool(int(args.threads)) as p:
+        with get_context("spawn").Pool(int(args.threads)) as p:
             results = manager.list([])
             mutex = manager.Lock()
             semaphore = manager.Semaphore(int(args.threads))
@@ -93,8 +93,6 @@ def main():
                 semaphore.acquire()
                 p.apply_async(do_process, (args.processor, storage_object, record, results, mutex, semaphore),
                               callback=callback, error_callback=error_callback)
-            # p.close()
-            # p.join()
 
             with mutex:
                 flush_results(storage_object, results)

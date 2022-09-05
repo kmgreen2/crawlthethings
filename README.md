@@ -238,7 +238,6 @@ provide your own public key (optional) and VPC id:
   secretsprovider: <this should be your KMS, if you chose to go that route>
   aws:region: us-west-2
   jobs:instance_type: c6g.4xlarge
-  jobs:nat_subnet_cidr: 10.1.2.0/24
   jobs:public_key: <your SSH public key>
   jobs:ssm_arn: arn:aws:iam::884270592710:policy/SessionManagerPermissions
   jobs:subnet_cidr: 10.1.1.0/24
@@ -253,10 +252,8 @@ Previewing update (<name-you-provided>):
  +   pulumi:pulumi:Stack               jobs-test                                create
  +   ├─ aws:iam:Role                   awsBatchServiceRoleRole                  create
  +   ├─ aws:iam:Role                   ecsInstanceRoleRole                      create
- +   ├─ aws:ec2:Subnet                 natSubnet                                create
  +   ├─ aws:ec2:Subnet                 crawlTheThingsSubnet                     create
  +   ├─ aws:ec2:SecurityGroup          crawlTheThingsVpcSecurityGroup           create
- +   ├─ aws:ec2:Eip                    natEip                                   create
  +   ├─ aws:ec2:KeyPair                key_pair                                 create
  +   ├─ aws:ec2:InternetGateway        igw                                      create
  +   ├─ aws:iam:RolePolicyAttachment   awsBatchServiceRoleRolePolicyAttachment  create
@@ -264,15 +261,12 @@ Previewing update (<name-you-provided>):
  +   ├─ aws:iam:RolePolicyAttachment   ssmRolePolicyAttachment                  create
  +   ├─ aws:iam:InstanceProfile        ecsInstanceRoleInstanceProfile           create
  +   ├─ aws:ec2:RouteTable             egressRoutes                             create
- +   ├─ aws:ec2:NatGateway             nat                                      create
- +   ├─ aws:ec2:RouteTable             natRoutes                                create
  +   ├─ aws:ec2:RouteTableAssociation  egressRouteAssociation                   create
  +   ├─ aws:batch:ComputeEnvironment   crawlTheThings                           create
- +   ├─ aws:ec2:RouteTableAssociation  natRouteAssociation                      create
  +   └─ aws:batch:JobQueue             crawlTheThings                           create
 
 Resources:
-    + 20 to create
+    + 15 to create
 ```
 
 If you do not get errors, run `pulumi up -s <name-you-provided>`.  Creation should take a few minutes.

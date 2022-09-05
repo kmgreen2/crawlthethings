@@ -59,11 +59,8 @@ security_group = aws.ec2.SecurityGroup("crawlTheThingsVpcSecurityGroup",
 
 subnet = aws.ec2.Subnet("crawlTheThingsSubnet",
                         vpc_id=config.vpc_id,
+                        map_public_ip_on_launch=True,
                         cidr_block=config.subnet_cidr)
-
-nat_subnet = aws.ec2.Subnet("natSubnet",
-                        vpc_id=config.vpc_id,
-                        cidr_block=config.nat_subnet_cidr)
 
 igw = aws.ec2.InternetGateway("igw",
     vpc_id=config.vpc_id,
@@ -71,33 +68,6 @@ igw = aws.ec2.InternetGateway("igw",
         "Name": "igw",
     })
 
-
-nat_eip = aws.ec2.Eip("natEip", vpc=True)
-
-nat = aws.ec2.NatGateway("nat",
-    allocation_id=nat_eip.id,
-    connectivity_type="public",
-    subnet_id=nat_subnet.id,
-    tags={
-        "Name": "natGw",
-    },
-    opts=pulumi.ResourceOptions(depends_on=[igw]))
-
-nat_routes = aws.ec2.RouteTable("natRoutes",
-    vpc_id=config.vpc_id,
-    routes=[
-        aws.ec2.RouteTableRouteArgs(
-            cidr_block='0.0.0.0/0',
-            nat_gateway_id=nat.id
-        ),
-    ],
-    tags={
-        "Name": "natRoutes",
-    })
-
-nat_route_association = aws.ec2.RouteTableAssociation("natRouteAssociation",
-    subnet_id=subnet.id,
-    route_table_id=nat_routes.id)
 
 egress_routes = aws.ec2.RouteTable("egressRoutes",
     vpc_id=config.vpc_id,
@@ -112,7 +82,7 @@ egress_routes = aws.ec2.RouteTable("egressRoutes",
     })
 
 egress_route_association = aws.ec2.RouteTableAssociation("egressRouteAssociation",
-    subnet_id=nat_subnet.id,
+    subnet_id=subnet.id,
     route_table_id=egress_routes.id)
 
 import pulumi

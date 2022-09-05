@@ -108,7 +108,8 @@ def recompress_warc_file(from_path: str, to_path: str):
     recompressor.recompress()
 
 
-def get_local_warc_file(key: str, offset: int, length: int, bucket: str) -> Tuple[BinaryIO, str]:
+def get_local_warc_file(key: str, offset: int, length: int, bucket: str, logger: Logger, verify: bool = False) -> Tuple[
+    BinaryIO, str]:
     aws_access_key_id, aws_secret_access_key = get_s3_credentials()
     conn = default_s3_connector(aws_access_key_id=aws_access_key_id, aws_secret_access_key=aws_secret_access_key)
     bucket_conn = conn.get_bucket(bucket)
@@ -116,20 +117,28 @@ def get_local_warc_file(key: str, offset: int, length: int, bucket: str) -> Tupl
     local_path = f'/tmp/{local_filename}'
     k = get_warc_s3_key(key, offset, length, bucket=bucket_conn)
     download_warc_file(k, local_path)
-    if not check_warc_file(local_path):
-        recompress_warc_file(local_path, f'{local_path}.tmp')
-        shutil.move(f'{local_path}.tmp', local_path)
+    logger.info(f'Downloaded {local_filename}...')
+    if verify:
+        if not check_warc_file(local_path):
+            recompress_warc_file(local_path, f'{local_path}.tmp')
+            shutil.move(f'{local_path}.tmp', local_path)
+            logger.error(f'Verification of  {local_filename} failed...')
+        else:
+            logger.info(f'Verified {local_filename}...')
+    else:
+        logger.info(f'Skipped verification of {local_filename}...')
     return open(local_path, 'rb'), local_path
 
 
 def download_warc_files(bucket: str, index_fp: TextIO, cache: List[WarcCacheEntry], max_cache_len: int,
-                        files_downloading: threading.Condition):
+                        files_downloading: threading.Condition, logger: Logger):
     while True:
         warc_files = []
         eof = False
 
         # If we have room in the cache, get the index lines and derive the S3 keys
-        while len(cache) < max_cache_len:
+        logger.info(f'Found room for {max_cache_len - len(cache)} files in the cache')
+        while max_cache_len - len(cache) > len(warc_files):
             line = index_fp.readline()
             if line == '':
                 eof = True
@@ -139,15 +148,17 @@ def download_warc_files(bucket: str, index_fp: TextIO, cache: List[WarcCacheEntr
 
         # If we have keys to process, download the files, otherwise, go to sleep
         if len(warc_files) > 0:
-            pool = ThreadPool(len(warc_files))
-            results = pool.starmap(get_local_warc_file,
-                                   map(lambda x: (x.key, x.offset, x.length, bucket), warc_files))
+            with ThreadPool(len(warc_files)) as pool:
+                results = pool.starmap(get_local_warc_file,
+                                       map(lambda x: (x.key, x.offset, x.length, bucket, logger), warc_files))
+
+            logger.info(f'Downloaded {len(warc_files)} WARC files...')
             zipped_results = zip(warc_files, results)
-            pool.close()
-            pool.join()
+            # ToDo(KMG): The appends need to be protected by a lock
             for result in zipped_results:
                 cache.append(WarcCacheEntry(result[0], result[1][0], result[1][1]))
             with files_downloading:
+                logger.info(f'Notifying main thread. Cache size: {len(cache)}')
                 files_downloading.notify()
         elif not eof:
             time.sleep(10)
@@ -178,15 +189,21 @@ class WarcIngestor(Ingestor):
         self.warc_file_cache: List[WarcCacheEntry] = []
 
         self.download_thread = threading.Thread(target=download_warc_files,
-                                                args=(self.bucket, self.index_fp, self.warc_file_cache, 4,
-                                                      self.files_downloading))
+                                                args=(self.bucket, self.index_fp, self.warc_file_cache, 16,
+                                                      self.files_downloading, self.logger))
         self.download_thread.start()
 
     def _get_local_warc_file(self):
         while len(self.warc_file_cache) == 0 and not self.index_fp.closed:
+            self.logger.info(f'WARC file cache size: {len(self.warc_file_cache)}')
             with self.files_downloading:
-                self.files_downloading.wait(timeout=5)
+                self.logger.info('Waiting for index files to download...')
+                self.files_downloading.wait(timeout=10)
+                self.logger.info('Wait timed-out...')
+
+        self.logger.info(f'Have {len(self.warc_file_cache)} cached WARC files...')
         if len(self.warc_file_cache) > 0:
+            self.logger.info('Popping next index file...')
             entry = self.warc_file_cache.pop(0)
             return entry.warc_file, entry.warc_fp, entry.local_path
         else:
