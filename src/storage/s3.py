@@ -1,11 +1,9 @@
 import logging
-
-import boto
 import os
-import sys
-from boto.s3.key import Key
-from boto.s3.connection import S3Connection
 from typing import Tuple
+
+from boto.s3.connection import S3Connection
+from boto.s3.key import Key
 
 from src.storage.remote import RemoteObject
 
@@ -29,6 +27,11 @@ class S3Object(RemoteObject):
                             host=f's3.{self.region}.amazonaws.com')
         bucket_conn = conn.get_bucket(bucket)
         self.k = Key(bucket_conn, path)
+
+    def get(self, local_path: str) -> int:
+        with open(local_path, 'w') as fd:
+            self.k.get_file(fd)
+            return fd.tell()
 
     def put(self, local_path: str) -> int:
         written = 0
